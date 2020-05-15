@@ -8,6 +8,7 @@ import dateparser
 from boto3_helper import get_mspp_covid_data
 import timeit
 from db import get_posgres_connection
+import os
 
 import logging
 from botocore.exceptions import ClientError
@@ -92,7 +93,7 @@ def get_all_mspp_pdf_file_links():
 
 
 def get_mspp_data(mspp_df):
-    s3BucketName='mlhaiti-data'
+    s3BucketName=os.getenv("AWS_S3_BUCKET")
     # Start the iteration at 12 since I couldn't parse 11
     for index, data in mspp_df.iloc[12:].iterrows():
         file_date = data['document_date']
