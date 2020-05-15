@@ -74,7 +74,8 @@ def get_pdf_file_links(mpspp_page='https://mspp.gouv.ht/newsite/documentation.ph
     return pdf_links
 
 def get_all_mspp_pdf_file_links():
-    mspp_pages = ['https://mspp.gouv.ht/documentation.php']
+    mspp_pages = []
+    #df = pd.read_sql_table('mspp_covid19_links',con=get_posgres_connection(), schema='public')
     for page_num in range(6):
         mspp_documentation_page_template = f"https://mspp.gouv.ht/documentation.php?start={page_num}&categorie=10"
         mspp_pages.append(mspp_documentation_page_template)
@@ -94,22 +95,33 @@ def get_all_mspp_pdf_file_links():
 def get_mspp_data(mspp_df):
     s3BucketName='mlhaiti-data'
     # Start the iteration at 12 since I couldn't parse 11
-    for index, data in mspp_df.iloc[12:].iterrows():
-        file_date = data['document_date']
+    for index, data in mspp_df.iterrows():
+        _mspp_dict = {}
+        file_date = data['document_date'].date()
         print("starting to load ",file_date)
         local_file = f'MSPP_COVID19_data_{file_date}.pdf'
         document_name = f"public-data/mspp/covid19-updates/{local_file}"
         download_file(data['url'],local_file)
+        _mspp_dict['document_date']=data['document_date']
+        _mspp_dict['document_description']=data['document_description']
+        _mspp_dict['local_file'] = local_file
         upload_file(local_file, s3BucketName, document_name)
+        _mspp_dict['document_name'] = document_name
+        _mspp_dict['bucket_name'] = s3BucketName
+        _mspp_dict["url"]=data['url']
+        # __mspp_df = pd.DataFrame(data=_mspp_dict)
+        # #print(type(__mspp_df))
+        # print(_mspp_dict)
+        # exit()
         try:
             start_time = timeit.default_timer()
             mspp_data = get_mspp_covid_data(s3BucketName,document_name)
             elapsed = timeit.default_timer() - start_time
             print('Function "{name}" took {time} seconds to complete.'.format(name=file_date, time=elapsed))
-            print(mspp_data)
             if isinstance(mspp_data, pd.DataFrame):
                 mspp_data['document_date'] = data['document_date']
                 mspp_data.to_sql("mspp_covid19_cases",index=False,schema='public',con=get_posgres_connection(),if_exists='append')
+                #__mspp_df.to_sql("mspp_covid19_links",index=False,schema='public',con=get_posgres_connection(),if_exists='append')
             else:
                 print(data['document_date']," was not loaded")
         except(TypeError, SyntaxError, NameError, ZeroDivisionError, ValueError,RuntimeError, OSError):

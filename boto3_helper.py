@@ -3,7 +3,8 @@ import time
 import pandas as pd
 from datetime import datetime
 from io import StringIO
-
+from trp import Document, Cell, Table
+import json
 
 
 def startJob(s3BucketName, objectName):
@@ -57,10 +58,14 @@ def getJobResults(jobId):
         nextToken = None
         if('NextToken' in response):
             nextToken = response['NextToken']
-
+    # print(pages)
+    # f = open("test_{}.json".format(jobId), "w")
+    # f.write(json.loads(pages))
+    # f.close()
     return pages
 
 def generate_table_csv(table_result, blocks_map, table_index):
+    #rows = Table(table_result,blocks_map).rows
     rows = get_rows_columns_map(table_result, blocks_map)
 
     csv = ""
@@ -75,19 +80,20 @@ def generate_table_csv(table_result, blocks_map, table_index):
 
 def get_rows_columns_map(table_result, blocks_map):
     rows = {}
-    for relationship in table_result['Relationships']:
-        if relationship['Type'] == 'CHILD':
-            for child_id in relationship['Ids']:
-                cell = blocks_map[child_id]
-                if cell['BlockType'] == 'CELL':
-                    row_index = cell['RowIndex']
-                    col_index = cell['ColumnIndex']
-                    if row_index not in rows:
-                        # create new row
-                        rows[row_index] = {}
+    if('Relationships' in table_result and table_result['Relationships']):
+        for relationship in table_result['Relationships']:
+            if relationship['Type'] == 'CHILD':
+                for child_id in relationship['Ids']:
+                    cell = blocks_map[child_id]
+                    if cell['BlockType'] == 'CELL':
+                        row_index = cell['RowIndex']
+                        col_index = cell['ColumnIndex']
+                        if row_index not in rows:
+                            # create new row
+                            rows[row_index] = {}
 
-                    # get the text value
-                    rows[row_index][col_index] = get_text(cell, blocks_map)
+                        # get the text value
+                        rows[row_index][col_index] = get_text(cell, blocks_map)
     return rows
 
 
@@ -108,6 +114,7 @@ def get_text(result, blocks_map):
 
 def get_table_responses(response):
     response_item = response
+
     # Get the text blocks
     blocks=response_item['Blocks']
     #pprint.pprint(blocks)
@@ -128,14 +135,27 @@ def get_table_responses(response):
         #csv += '\n\n'
 
     return csvs
+def generate_csv_from_table(table):
+    csv = ""
+    for r, row in enumerate(table.rows):
+        for c, cell in enumerate(row.cells):
+            csv += '{}'.format(cell.text) + ","
+        csv += '\n'
+    csv += '\n\n\n'
+    return csv
 
 def get_tables_from_pdf(s3BucketName,documentName):
     jobId = startJob(s3BucketName, documentName)
     print("Started job with id: {}".format(jobId))
     if(isJobComplete(jobId)):
         response = getJobResults(jobId)
-    tables = get_table_responses(response[0]) # Get first item in response
-    return tables
+    doc = Document(response)
+    csv_tables =[]
+    for page in doc.pages:
+        for table in page.tables:
+            csv_tables.append(generate_csv_from_table(table))
+    #tables = get_table_responses(response[0]) # Get first item in response
+    return csv_tables
 
 from datetime import date
 import re
