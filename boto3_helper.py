@@ -215,6 +215,6 @@ def get_mspp_covid_data(s3BucketName,documentName):
         print("The following document was not loaded correctly:",documentName)
         return None
 
-s3BucketName='mlhaiti-data'
-documentName='Sitrep COVID 19 10 05 2020.pdf'
-df = get_mspp_covid_data(s3BucketName,documentName)
+# s3BucketName='mlhaiti-data'
+# documentName='Sitrep COVID 19 10 05 2020.pdf'
+# df = get_mspp_covid_data(s3BucketName,documentName)

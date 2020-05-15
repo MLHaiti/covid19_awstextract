@@ -1,17 +1,48 @@
 import re
 from urllib.parse import quote_plus,quote
+from urllib.request import urlopen
 from bs4 import BeautifulSoup
 import requests
 import pandas as pd
 import dateparser
+from boto3_helper import get_mspp_covid_data
+import timeit
+from db import get_posgres_connection
 
+import logging
+from botocore.exceptions import ClientError
+
+import boto3
 
 def download_file(download_url,download_name="document.pdf"):
-    response = urlopen(download_url)
+    response = requests.get(download_url)
     file = open(download_name, 'wb')
-    file.write(response.read())
+    file.write(response.content)
     file.close()
     print("Completed")
+
+
+def upload_file(file_name, bucket, object_name=None):
+    """Upload a file to an S3 bucket
+
+    :param file_name: File to upload
+    :param bucket: Bucket to upload to
+    :param object_name: S3 object name. If not specified then file_name is used
+    :return: True if file was uploaded, else False
+    """
+
+    # If S3 object_name was not specified, use file_name
+    if object_name is None:
+        object_name = file_name
+
+    # Upload the file
+    s3_client = boto3.client('s3')
+    try:
+        response = s3_client.upload_file(file_name, bucket, object_name)
+    except ClientError as e:
+        logging.error(e)
+        return False
+    return True
 
 def get_pdf_file_links(mpspp_page='https://mspp.gouv.ht/newsite/documentation.php'):
     web =  requests.get(mpspp_page)
@@ -25,7 +56,8 @@ def get_pdf_file_links(mpspp_page='https://mspp.gouv.ht/newsite/documentation.ph
         if link:
             if re.match(r'^.*\.pdf$',link):
                 quote_href = quote(link[2:])
-                url_path = "https://mspp.gouv.ht" + quote_href
+                # url_path = quote_href
+                url_path = link
 
                 # Get Tag Description
                 # tag_contents = a_tag.contents[0]
@@ -57,3 +89,30 @@ def get_all_mspp_pdf_file_links():
     mspp_df['document_date'] = mspp_df['document_date'].str.replace('1er','1')
     mspp_df['document_date'] = mspp_df['document_date'].apply(lambda x: dateparser.parse(x))
     return mspp_df
+
+
+def get_mspp_data(mspp_df):
+    s3BucketName='mlhaiti-data'
+    # Start the iteration at 12 since I couldn't parse 11
+    for index, data in mspp_df.iloc[12:].iterrows():
+        file_date = data['document_date']
+        print("starting to load ",file_date)
+        local_file = f'MSPP_COVID19_data_{file_date}.pdf'
+        document_name = f"public-data/mspp/covid19-updates/{local_file}"
+        download_file(data['url'],local_file)
+        upload_file(local_file, s3BucketName, document_name)
+        try:
+            start_time = timeit.default_timer()
+            mspp_data = get_mspp_covid_data(s3BucketName,document_name)
+            elapsed = timeit.default_timer() - start_time
+            print('Function "{name}" took {time} seconds to complete.'.format(name=file_date, time=elapsed))
+            print(mspp_data)
+            if isinstance(mspp_data, pd.DataFrame):
+                mspp_data['document_date'] = data['document_date']
+                mspp_data.to_sql("mspp_covid19_cases",index=False,schema='public',con=get_posgres_connection(),if_exists='append')
+            else:
+                print(data['document_date']," was not loaded")
+        except(TypeError, SyntaxError, NameError, ZeroDivisionError, ValueError,RuntimeError, OSError):
+            print(TypeError, SyntaxError, NameError, ZeroDivisionError, ValueError,RuntimeError, OSError)
+            print(file_date," was not loaded")
+            pass
