@@ -7,6 +7,3 @@ con = get_posgres_connection()
 mspp_df= get_all_mspp_pdf_file_links()
 
 df = get_mspp_data(mspp_df)
-
-df.to_csv("data.csv")
-mspp_df.to_csv("mspp.csv")
