@@ -139,7 +139,9 @@ def generate_csv_from_table(table):
     csv = ""
     for r, row in enumerate(table.rows):
         for c, cell in enumerate(row.cells):
-            csv += '{}'.format(cell.text) + ","
+            #Replace , by '' because 1026 is written like 1,026
+            #That can cause a problem to csv file
+            csv += '{}'.format(cell.text.replace(',','')) + ","
         csv += '\n'
     csv += '\n\n\n'
     return csv
@@ -238,7 +240,6 @@ def get_mspp_covid_data(s3BucketName,documentName):
             df['taux_de_letalite'] = df['taux_de_letalite'].str.extract(r'([\d\w\.]*)%?').replace('O','0').replace('','0').astype(float)/100
 
         #df[['cas_confirmes','deces','taux_de_letalite']] = pd.to_numeric(df[['cas_confirmes','deces','taux_de_letalite']], errors="coerce")
-        print(df)
         return df
     except Exception as e :
         if hasattr(e, 'message'):
