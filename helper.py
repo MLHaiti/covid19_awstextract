@@ -112,18 +112,30 @@ def get_mspp_data(mspp_df):
         upload_file(local_file, s3BucketName, document_name)
         __mspp_df['document_name'] = document_name
         __mspp_df['bucket_name'] = s3BucketName
+        __mspp_df['message'] = None
         try:
             start_time = timeit.default_timer()
             mspp_data = get_mspp_covid_data(s3BucketName,document_name)
             elapsed = timeit.default_timer() - start_time
             print('Function "{name}" took {time} seconds to complete.'.format(name=file_date, time=elapsed))
             if isinstance(mspp_data, pd.DataFrame):
+                if(mspp_data.empty):
+                    __mspp_df["message"]="The first table results are not compatible"
                 mspp_data['document_date'] = data['document_date']
                 mspp_data.to_sql("mspp_covid19_cases",index=False,schema='public',con=get_posgres_connection(),if_exists='append')
                 __mspp_df.to_sql("mspp_covid19_links",index=False,schema='public',con=get_posgres_connection(),if_exists='append')
+            elif ("message" in mspp_data):
+                __mspp_df["message"]=mspp_data["message"]
+                __mspp_df.to_sql("mspp_covid19_links",index=False,schema='public',con=get_posgres_connection(),if_exists='append')
             else:
                 print(data['document_date']," was not loaded")
-        except(TypeError, SyntaxError, NameError, ZeroDivisionError, ValueError,RuntimeError, OSError):
-            print(TypeError, SyntaxError, NameError, ZeroDivisionError, ValueError,RuntimeError, OSError)
+        except Exception as e :
+            if hasattr(e, 'message'):
+                print("message", e.message)
+                __mspp_df["message"]=e.message
+            else:
+                print("e" ,e)
+                __mspp_df["message"]=str(e)
             print(file_date," was not loaded")
+            __mspp_df.to_sql("mspp_covid19_links",index=False,schema='public',con=get_posgres_connection(),if_exists='append')
             pass

@@ -149,15 +149,18 @@ def generate_csv_from_table(table):
 def get_tables_from_pdf(s3BucketName,documentName):
     jobId = startJob(s3BucketName, documentName)
     print("Started job with id: {}".format(jobId))
-    if(isJobComplete(jobId)):
+    status = isJobComplete(jobId)
+    if(status=="SUCCEEDED"):
         response = getJobResults(jobId)
-    doc = Document(response)
-    csv_tables =[]
-    for page in doc.pages:
-        for table in page.tables:
-            csv_tables.append(generate_csv_from_table(table))
-    #tables = get_table_responses(response[0]) # Get first item in response
-    return csv_tables
+        doc = Document(response)
+        csv_tables =[]
+        for page in doc.pages:
+            for table in page.tables:
+                csv_tables.append(generate_csv_from_table(table))
+        #tables = get_table_responses(response[0]) # Get first item in response
+        return csv_tables
+    elif(status=="FAILED"):
+        return {"message":status}
 
 from datetime import date
 import re
@@ -184,6 +187,8 @@ def get_column_name(cols,regex):
 def get_mspp_covid_data(s3BucketName,documentName):
     # Get the data from the mspp pdf
     tables = get_tables_from_pdf(s3BucketName=s3BucketName,documentName=documentName)
+    if("message" in tables):
+        return tables
     # Read in the string as a CSV
     df = pd.read_csv(StringIO(tables[0]))
     # Subselect the desired columns
@@ -244,10 +249,11 @@ def get_mspp_covid_data(s3BucketName,documentName):
     except Exception as e :
         if hasattr(e, 'message'):
             print("message", e.message)
+            return {"message":str(e.message)}
         else:
             print("e" ,e)
         print("The following document was not loaded correctly:",documentName)
-        return None
+        return {"message":str(e)}
 
 # s3BucketName='mlhaiti-data'
 # documentName='Sitrep COVID 19 10 05 2020.pdf'
