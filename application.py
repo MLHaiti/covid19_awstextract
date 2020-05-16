@@ -10,9 +10,3 @@ df = get_mspp_data(mspp_df)
 
 df.to_csv("data.csv")
 mspp_df.to_csv("mspp.csv")
-
-
-
-#mspp_df.to_sql("mspp_covid19_cases",index=False,schema='public',con=get_postgres_connection(),if_exists='append')
-
-

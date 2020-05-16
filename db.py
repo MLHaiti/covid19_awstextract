@@ -11,3 +11,9 @@ def get_posgres_connection():
     db_host = os.getenv("PSQL_DB_HOST")
     sql_engine = create_engine(f'postgresql://{db_user}:{db_password}@{db_host}:5432/{db_name}')
     return sql_engine
+
+
+def is_table_exist(table_name):
+    con = get_posgres_connection()
+    check = con.has_table(table_name)
+    return check
