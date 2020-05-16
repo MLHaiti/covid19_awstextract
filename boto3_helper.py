@@ -3,7 +3,8 @@ import time
 import pandas as pd
 from datetime import datetime
 from io import StringIO
-
+from trp import Document, Cell, Table
+import json
 
 
 def startJob(s3BucketName, objectName):
@@ -57,10 +58,14 @@ def getJobResults(jobId):
         nextToken = None
         if('NextToken' in response):
             nextToken = response['NextToken']
-
+    # print(pages)
+    # f = open("test_{}.json".format(jobId), "w")
+    # f.write(json.loads(pages))
+    # f.close()
     return pages
 
 def generate_table_csv(table_result, blocks_map, table_index):
+    #rows = Table(table_result,blocks_map).rows
     rows = get_rows_columns_map(table_result, blocks_map)
 
     csv = ""
@@ -75,19 +80,20 @@ def generate_table_csv(table_result, blocks_map, table_index):
 
 def get_rows_columns_map(table_result, blocks_map):
     rows = {}
-    for relationship in table_result['Relationships']:
-        if relationship['Type'] == 'CHILD':
-            for child_id in relationship['Ids']:
-                cell = blocks_map[child_id]
-                if cell['BlockType'] == 'CELL':
-                    row_index = cell['RowIndex']
-                    col_index = cell['ColumnIndex']
-                    if row_index not in rows:
-                        # create new row
-                        rows[row_index] = {}
+    if('Relationships' in table_result and table_result['Relationships']):
+        for relationship in table_result['Relationships']:
+            if relationship['Type'] == 'CHILD':
+                for child_id in relationship['Ids']:
+                    cell = blocks_map[child_id]
+                    if cell['BlockType'] == 'CELL':
+                        row_index = cell['RowIndex']
+                        col_index = cell['ColumnIndex']
+                        if row_index not in rows:
+                            # create new row
+                            rows[row_index] = {}
 
-                    # get the text value
-                    rows[row_index][col_index] = get_text(cell, blocks_map)
+                        # get the text value
+                        rows[row_index][col_index] = get_text(cell, blocks_map)
     return rows
 
 
@@ -108,6 +114,7 @@ def get_text(result, blocks_map):
 
 def get_table_responses(response):
     response_item = response
+
     # Get the text blocks
     blocks=response_item['Blocks']
     #pprint.pprint(blocks)
@@ -128,14 +135,29 @@ def get_table_responses(response):
         #csv += '\n\n'
 
     return csvs
+def generate_csv_from_table(table):
+    csv = ""
+    for r, row in enumerate(table.rows):
+        for c, cell in enumerate(row.cells):
+            #Replace , by '' because 1026 is written like 1,026
+            #That can cause a problem to csv file
+            csv += '{}'.format(cell.text.replace(',','')) + ","
+        csv += '\n'
+    csv += '\n\n\n'
+    return csv
 
 def get_tables_from_pdf(s3BucketName,documentName):
     jobId = startJob(s3BucketName, documentName)
     print("Started job with id: {}".format(jobId))
     if(isJobComplete(jobId)):
         response = getJobResults(jobId)
-    tables = get_table_responses(response[0]) # Get first item in response
-    return tables
+    doc = Document(response)
+    csv_tables =[]
+    for page in doc.pages:
+        for table in page.tables:
+            csv_tables.append(generate_csv_from_table(table))
+    #tables = get_table_responses(response[0]) # Get first item in response
+    return csv_tables
 
 from datetime import date
 import re
@@ -187,31 +209,43 @@ def get_mspp_covid_data(s3BucketName,documentName):
         print("columns srt", str_columns)
         print("missign columns srt", missing_columns)
 
+
         # df = df.loc[:,[dept_col,suspect_col,confirme_col,deces_col,letalite_col]]
         # df.columns = ['departement','cas_suspects','cas_confirmes','deces','taux_de_letalite']
         df = df.loc[:,columns]
         df.columns = str_columns
+
+        # remove null rows
+        df.dropna(inplace=True)
         # print("extracted_df" , df)
         # Clean the data
         #df['date'] = data_date
         # replace 'O' with 0 and cast column to an int
         for el in missing_columns:
             df[el]=None
-
-        if df['cas_confirmes'].isnull().sum()==0 and df['cas_confirmes'].dtype == object:
-            df['cas_confirmes'] = df['cas_confirmes'].str.replace('O','0').astype(int)
+        if df['cas_confirmes'].dtype == object:
+            df['cas_confirmes'] = pd.to_numeric(df['cas_confirmes'].str.replace('O','0'), errors="coerce")
+            #remove null row
+            df = df[df["cas_confirmes"].notnull()]
+            df["cas_confirmes"]=df["cas_confirmes"].astype(int)
 
         # replace 'O' with 0 and cast column to an int
-        if df['deces'].isnull().sum()==0 and df['deces'].dtype == object:
-            df['deces'] = df['deces'].str.replace('O','0') .astype(int)
+        if df['deces'].dtype == object:
+            df['deces'] = df['deces'].str.replace('O','0').astype(int)
 
         # Remove the '%' and fill empty values with 0 then convert to a float
         # We divide by 100 in the end to convert it to the percentage
-        if df['taux_de_letalite'].isnull().sum()==0 and df['taux_de_letalite'].dtype == object:
+        #print("letalite",df['taux_de_letalite'].notnull().sum())
+        if df['taux_de_letalite'].dtype == object:
             df['taux_de_letalite'] = df['taux_de_letalite'].str.extract(r'([\d\w\.]*)%?').replace('O','0').replace('','0').astype(float)/100
+
+        #df[['cas_confirmes','deces','taux_de_letalite']] = pd.to_numeric(df[['cas_confirmes','deces','taux_de_letalite']], errors="coerce")
         return df
-    except (TypeError, SyntaxError, NameError, ZeroDivisionError, ValueError,RuntimeError, OSError) :
-        print(TypeError, SyntaxError, NameError, ZeroDivisionError, ValueError,RuntimeError, OSError)
+    except Exception as e :
+        if hasattr(e, 'message'):
+            print("message", e.message)
+        else:
+            print("e" ,e)
         print("The following document was not loaded correctly:",documentName)
         return None
 
