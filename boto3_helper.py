@@ -207,31 +207,44 @@ def get_mspp_covid_data(s3BucketName,documentName):
         print("columns srt", str_columns)
         print("missign columns srt", missing_columns)
 
+
         # df = df.loc[:,[dept_col,suspect_col,confirme_col,deces_col,letalite_col]]
         # df.columns = ['departement','cas_suspects','cas_confirmes','deces','taux_de_letalite']
         df = df.loc[:,columns]
         df.columns = str_columns
+
+        # remove null rows
+        df.dropna(inplace=True)
         # print("extracted_df" , df)
         # Clean the data
         #df['date'] = data_date
         # replace 'O' with 0 and cast column to an int
         for el in missing_columns:
             df[el]=None
-
-        if df['cas_confirmes'].isnull().sum()==0 and df['cas_confirmes'].dtype == object:
-            df['cas_confirmes'] = df['cas_confirmes'].str.replace('O','0').astype(int)
+        if df['cas_confirmes'].dtype == object:
+            df['cas_confirmes'] = pd.to_numeric(df['cas_confirmes'].str.replace('O','0'), errors="coerce")
+            #remove null row
+            df = df[df["cas_confirmes"].notnull()]
+            df["cas_confirmes"]=df["cas_confirmes"].astype(int)
 
         # replace 'O' with 0 and cast column to an int
-        if df['deces'].isnull().sum()==0 and df['deces'].dtype == object:
-            df['deces'] = df['deces'].str.replace('O','0') .astype(int)
+        if df['deces'].dtype == object:
+            df['deces'] = df['deces'].str.replace('O','0').astype(int)
 
         # Remove the '%' and fill empty values with 0 then convert to a float
         # We divide by 100 in the end to convert it to the percentage
-        if df['taux_de_letalite'].isnull().sum()==0 and df['taux_de_letalite'].dtype == object:
+        #print("letalite",df['taux_de_letalite'].notnull().sum())
+        if df['taux_de_letalite'].dtype == object:
             df['taux_de_letalite'] = df['taux_de_letalite'].str.extract(r'([\d\w\.]*)%?').replace('O','0').replace('','0').astype(float)/100
+
+        #df[['cas_confirmes','deces','taux_de_letalite']] = pd.to_numeric(df[['cas_confirmes','deces','taux_de_letalite']], errors="coerce")
+        print(df)
         return df
-    except (TypeError, SyntaxError, NameError, ZeroDivisionError, ValueError,RuntimeError, OSError) :
-        print(TypeError, SyntaxError, NameError, ZeroDivisionError, ValueError,RuntimeError, OSError)
+    except Exception as e :
+        if hasattr(e, 'message'):
+            print("message", e.message)
+        else:
+            print("e" ,e)
         print("The following document was not loaded correctly:",documentName)
         return None
 

@@ -8,7 +8,7 @@ load_dotenv()
 
 class TestBoto3Helper(unittest.TestCase):
     def test_get_mspp_covid_data(self):
-        file_date="2020-05-12"
+        file_date="2020-05-10"
         local_file = f'MSPP_COVID19_data_{file_date}.pdf'
         document_name = f"public-data/mspp/covid19-updates/{local_file}"
         s3BucketName = os.getenv("AWS_S3_BUCKET")
