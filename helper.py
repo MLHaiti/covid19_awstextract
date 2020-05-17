@@ -97,6 +97,11 @@ def get_all_mspp_pdf_file_links():
 
     return mspp_df
 
+def get_document_name(file_date):
+        local_file = f'MSPP_COVID19_data_{file_date}.pdf'
+        document_name = f"public-data/mspp/covid19-updates/{local_file}"
+        return document_name
+
 
 def get_mspp_data(mspp_df):
     s3BucketName=os.getenv("AWS_S3_BUCKET")
